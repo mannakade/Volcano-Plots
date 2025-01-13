@@ -1,0 +1,45 @@
+# Load packages 
+library(tidyverse) # a package that acts as a container for other known packages.
+library(DESeq2)  # For differential expression analysis
+library(ggplot2) # For plotting
+
+# Load datasets 
+airway.metadata <- read.csv("/Users/gabri/Downloads/DESeq2_finals/DESeq2_finals/GSE229344_metadata.csv")
+airway.counts <- read.delim("/Users/gabri/Downloads/DESeq2_finals/DESeq2_finals/GSE229344_raw_counts_GRCh38.p13_NCBI.tsv")
+
+coldata <- airway.metadata
+coldata <- coldata[match(colnames(airway.counts), coldata$id), ]
+
+head(coldata)
+
+# Verify that column names of counts match row names of metadata
+all(colnames(airway.counts) == rownames(coldata))  # Should return TRUE
+
+dds <- DESeqDataSetFromMatrix(countData = airway.counts,
+                              colData = coldata,
+                              design = ~ condition)
+dds <- DESeq(dds)
+rlogData <- rlog(dds, blind = TRUE)  # Perform regularized log transformation
+pcaData <- plotPCA(rlogData, intgroup = "condition", returnData = TRUE)
+ggplot(pcaData, aes(PC1, PC2, color = condition)) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  labs(title = "PCA of Gene Expression Data",
+       x = paste("PC1: ", round(pcaData$percentVar[1], 1), "% variance"),
+       y = paste("PC2: ", round(pcaData$percentVar[2], 1), "% variance"))
+
+res <- results(dds, contrast = c("condition", "CYB5R3", "PBS"))
+
+volcano_data <- as.data.frame(res)
+volcano_data$significant <- "No"
+volcano_data$significant[volcano_data$padj < 0.05 & abs(volcano_data$log2FoldChange) > 1] <- "Yes"
+
+# Create the volcano plot
+ggplot(volcano_data, aes(x = log2FoldChange, y = -log10(padj), color = significant)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  theme_minimal() +
+  labs(title = "Volcano Plot: CYB5R3 vs PBS",
+       x = "Log2 Fold Change",
+       y = "-Log10(p-value)") +
+  scale_color_manual(values = c("No" = "gray", "Yes" = "red"))
+
